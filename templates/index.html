@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Train Chart Status</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f2f2f2;
+            color: #333;
+            display: flex;
+            justify-content: space-between;
+        }
+        .left-content {
+            flex: 1;
+            margin-right: 20px;
+        }
+        .right-content {
+            flex: 1;
+        }
+        h1 {
+            color: #007bff;
+        }
+        form {
+            margin-bottom: 20px;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        label {
+            font-weight: bold;
+        }
+        input[type="text"],
+        select,
+        input[type="date"],
+        button {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: #fff;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #chartStatusResult {
+            margin-top: 20px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        #tableContainer {
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            overflow-x: auto;
+        }
+        #myAudio {
+            margin-top: 20px;
+        }
+
+        #loader {
+            display: none;
+            border: 5px solid rgba(0, 0, 0, 0.3);
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            width: 10px;
+            height: 10px;
+            animation: spin 1s linear infinite;
+            margin: 20% auto;
+          }
+          
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+
+
+
+    </style>
+</head>
+<body>
+    <div class="left-content">
+        <h1>Check Train Chart Status</h1>
+        <form id="chartStatusForm">
+            <label for="trainNumber">Train Number:</label>
+            <input type="text" id="trainNumber" required><br><br>
+            
+            <label for="station">Choose Station:</label>
+            <select id="station" required>
+                <!-- Dropdown options will be populated here using JavaScript -->
+            </select><br><br>
+            
+            <label for="journeyDate">Journey Date:</label>
+            <input type="date" id="journeyDate" required min="" max="" required ><br><br>
+            
+            <button type="submit" id="submit_form">Check Chart Status</button>
+
+        </form>
+    </div>
+
+    <div class="right-content">
+        <div id="chartStatusResult">Chart Status:</div>
+        <div id="loader" ></div>
+        <div id="tableContainer">
+            <!-- The HTML table generated from the DataFrame will be placed here -->
+        </div>
+        <audio id="myAudio"  controls preload='auto' autoplay>
+            <source src="./templates/audio.mp3" type="audio/wav">
+           <!--- <svg fill="WindowText" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 5v14l11-7z"/>
+                <path d="M0 0h24v24H0z" fill="none"/>
+              </svg> -->
+        </audio>
+        <button id="printPageButton" onclick="window.print()">Print</button><br>		
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const today = new Date();
+            const pastDate = new Date(today);
+            const futureDate = new Date(today);
+            pastDate.setDate(pastDate.getDate() - 1); 
+            futureDate.setDate(futureDate.getDate() + 1); 
+            const todayFormatted = today.toISOString().split('T')[0];
+            const pastDateFormatted = pastDate.toISOString().split('T')[0];
+            const futureDateFormatted = futureDate.toISOString().split('T')[0];
+            document.getElementById('journeyDate').setAttribute('max', futureDateFormatted);
+            document.getElementById('journeyDate').setAttribute('min', pastDateFormatted);
+        });
+
+
+
+
+        const trainNumberInput = document.getElementById('trainNumber');
+        const stationsDropdown = document.getElementById('station');
+
+        trainNumberInput.addEventListener('input', () => {
+            const selectedTrainNumber = trainNumberInput.value;
+        
+            // Validate train number format (5-digit string)
+            const isValidTrainNumber = /^\d{5}$/.test(selectedTrainNumber);
+        
+            if (isValidTrainNumber) {
+                // Fetch stations if train number is valid
+                fetch(`/stations/${selectedTrainNumber}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Stations could not be fetched. Please enter a valid train number.');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        stationsDropdown.innerHTML = ''; // Clear previous options
+                        data.stations.forEach(station => {
+                            const option = document.createElement('option');
+                            option.value = station;
+                            option.textContent = station;
+                            stationsDropdown.appendChild(option);
+                        });
+                    })
+                    .catch(error => {
+                        stationsDropdown.innerHTML = ''; // Clear previous options
+                        const option = document.createElement('option');
+                        option.value = '';
+                        option.textContent = error.message;
+                        stationsDropdown.appendChild(option);
+                    });
+            } else {
+                // Show error message for an invalid train number
+                stationsDropdown.innerHTML = ''; // Clear previous options
+                const option = document.createElement('option');
+                option.value = '';
+                option.textContent = 'Wait for few seconds to fetch stations automatically.If not able to get stations list, please enter a valid 5-digit train number';
+                stationsDropdown.appendChild(option);
+            }
+        });
+
+
+
+
+        // Handle form submission
+        function checkChartStatus(trainNumber, station, journeyDate) {
+            
+            fetch('/prev-chart-status', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    train_number: trainNumber,
+                    station: station,
+                    journey_date: journeyDate
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                    document.getElementById('chartStatusResult').textContent = `Chart Status: ${data.status}`;
+                    document.getElementById('tableContainer').innerHTML = data.table;
+            }).then(datafromsecond => {
+                return fetch('/chart-status', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            train_number: trainNumber,
+                            station: station,
+                            journey_date: journeyDate
+                        })
+                        })
+             })
+            .then(response => response.json())
+            .catch((error) => {
+                console.error('Error checking chart status:', error);
+                // Ensure the button is re-enabled in case of an error
+                document.getElementById('submit_form').disabled = false;
+            
+            })
+            .then(data => {
+                if (data.status.includes('The chart for your train was prepared at')) {
+                    // Chart is prepared, update the result
+                    document.getElementById('chartStatusResult').textContent = `Chart Status: ${data.status}`;
+                    window.alert(data.status);
+                    document.getElementById('tableContainer').innerHTML = data.table;
+                    var beepAudio = document.getElementById('myAudio');
+                    beepAudio.play();
+                    var audio = new Audio('./audio.mp3'); // Replace 'path/to/sound.mp3' with the actual path to your sound file
+                    audio.play();
+                    const audioBase64 = data.audio_base64;
+
+                    // Decode base64 string to binary data
+                    const binaryAudioData = atob(audioBase64);
+
+                    // Convert binary data to a Blob
+                    const audioBlob = new Blob([binaryAudioData], { type: 'audio/mpeg' });
+
+                    // Create an audio element
+                    //const audioElement = document.createElement('audio');
+                    /*
+                    const audioElement = document.getElementById('myAudio');
+                    audioElement.src = URL.createObjectURL(audioBlob);
+                    audioElement.controls = true;
+                    audioElement.autoplay = true;
+                    document.body.appendChild(audioElement);
+                    document.addEventListener('click', () => {
+                        audioElement.play();
+                    }, { once: true });
+                    */
+                    //audioElement.play();
+                } else if (data.status.includes('Chart will be prepared soon'))
+                {
+                    
+                     // Chart is not prepared, wait and check again after some time
+                     document.getElementById('chartStatusResult').textContent = `Chart Status: ${data.status}`;
+                     document.getElementById('tableContainer').innerHTML = data.table;
+                     checkChartStatus(trainNumber, station, journeyDate);
+                    /* setTimeout(() => {
+                         checkChartStatus(trainNumber, station, journeyDate);
+                     }, 5000);  */
+                }
+                document.getElementById('chartStatusResult').textContent = `Chart Status: ${data.status}`;
+            })
+            .catch((error) => {
+                console.error('Error checking chart status:', error);
+                // Ensure the button is re-enabled in case of an error
+                document.getElementById('submit_form').disabled = false;
+
+            });
+        };
+       
+        document.getElementById('chartStatusForm').addEventListener('submit', (event) => {
+            event.preventDefault();
+            var loader = document.getElementById('loader');
+            //loader.style.display = 'block';
+
+            document.getElementById('submit_form').disabled = true;
+            const trainNumber = document.getElementById('trainNumber').value;
+            const station = document.getElementById('station').value;
+            const journeyDate = document.getElementById('journeyDate').value;
+        
+            checkChartStatus(trainNumber, station, journeyDate)
+            .then(() => {
+                // Re-enable the button after the chart status check is completed
+                document.getElementById('submit_form').disabled = false;
+               // document.getElementById('printPageButton').disabled = false;
+            })
+            .catch((error) => {
+                console.error('Error checking chart status:', error);
+                // Ensure the button is re-enabled in case of an error
+                document.getElementById('submit_form').disabled = false;
+            
+            });
+            //loader.style.display = none;
+
+        });
+        
+    </script>
+</body>
+</html>
