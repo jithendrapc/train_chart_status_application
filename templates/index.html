@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Train Chart Status</title>
+    <style>
+    body {
+        font-family: Segoe UI, Tahoma, Geneva, Verdana, sans-serif;
+        margin: 20px;
+        background-color: #f2f2f2;
+        color: #333;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: space-between;
+    }
+    
+    .left-content {
+        flex: 1 0 140px;
+        margin-right: 20px;
+    }
+    
+    .right-content {
+        flex: 1 0 120px;
+    }
+    
+    h1 {
+        color: #FFA500;
+    }
+    
+    form {
+        margin-bottom: 20px;
+        background-color: #fff;
+        padding: 20px;
+        border-radius: 5px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+    
+    label {
+        font-weight: bold;
+    }
+    
+    input[type="text"],
+    select,
+    input[type="date"],
+    input[type="email"],
+    button {
+        margin-bottom: 10px;
+        padding: 10px;
+        border-radius: 5px;
+        border: 1px solid #ccc;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    
+    button {
+        background-color: #FFA500;
+        color: #fff;
+        cursor: pointer;
+    }
+    
+    button:hover {
+        background-color: #e59400;
+    }
+    
+    #chartStatusResult {
+        margin-top: 20px;
+        font-weight: bold;
+        color: #FFA500;
+    }
+    
+    #tableContainer {
+        border: 1px solid #ccc;
+        padding: 10px;
+        border-radius: 5px;
+        background-color: #fff;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        overflow-x: auto;
+    }
+    
+    #myAudio {
+        margin-top: 20px;
+    }
+    
+    #loader {
+        display: none;
+        border: 5px solid rgba(0, 0, 0, 0.3);
+        border-top: 5px solid #3498db;
+        border-radius: 50%;
+        width: 10px;
+        height: 10px;
+        animation: spin 1s linear infinite;
+        margin: 20% auto;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    .w3-container {
+        margin-bottom: 20px;
+    }
+    
+    .w3-card {
+        background-color: #fff;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+        padding: 8px;
+        border-radius: 8px;
+        cursor: pointer;
+        border: 2px solid;
+        border-color: #009688;
+        box-sizing: border-box;
+    }
+    
+    .w3-row {
+        display: flex;        
+    }
+    
+    .w3-col {
+        box-sizing: border-box;
+    }
+</style>
+</head>
+<body>
+    <div class="w3-card left-content">
+        <h1>Check Train Chart Status</h1>
+        <form id="chartStatusForm">
+            <label for="email">Gmail Address:<br>(You will be informed when the train chart is prepared)</label>
+            <input type="email" id="email" required><br><br>
+            <label for="trainNumber">Train Number:</label>
+            <input type="text" id="trainNumber" required><br><br>
+
+            <label for="station">Choose Boarding Station:</label>
+            <select id="station" required>
+                <!-- Dropdown options will be populated here using JavaScript -->
+            </select><br><br>
+
+            <label for="dstation">Choose Destination Station:</label>
+            <select id="dstation" required>
+                <!-- Dropdown options will be populated here using JavaScript -->
+            </select><br><br>
+
+            <label for="journeyDate">Journey Date:</label>
+            <input type="date" id="journeyDate" required min="" max=""><br><br>
+
+            <button type="submit" id="submit_form">Check Chart Status</button>
+        </form>
+    </div>
+
+    <div class="w3-card right-content">
+        <div id="chartStatusResult">Chart Status:  </div>
+        <div id="loader"></div>
+        <div id="tableContainer">
+            <!-- The HTML table generated from the DataFrame will be placed here -->
+        </div>
+        <audio id="myAudio" controls preload='auto' autoplay disabled=true style='display:none;'>
+            <source src="static/audio.mp3" type="audio/wav">
+        </audio>
+        <button id="printPageButton" onclick="window.print()">Print</button><br>		
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            initializeDateConstraints();
+        });
+
+        let subBtn = document.getElementById('submit_form');
+        let audio = document.getElementById('myAudio');
+        let trainNumberInput = document.getElementById('trainNumber');
+        const stationsDropdown = document.getElementById('station');
+        const dstationsDropdown = document.getElementById('dstation');
+        let stationList;
+
+        trainNumberInput.addEventListener('input', handleTrainNumberInput);
+
+        document.getElementById('chartStatusForm').addEventListener('submit', handleFormSubmit);
+
+        function initializeDateConstraints() {
+            const today = new Date();
+            const pastDate = new Date(today);
+            const futureDate = new Date(today);
+
+            pastDate.setDate(pastDate.getDate() - 1);
+            futureDate.setDate(futureDate.getDate() + 1);
+
+            const todayFormatted = today.toISOString().split('T')[0];
+            const pastDateFormatted = pastDate.toISOString().split('T')[0];
+            const futureDateFormatted = futureDate.toISOString().split('T')[0];
+
+            const journeyDateInput = document.getElementById('journeyDate');
+            journeyDateInput.setAttribute('max', futureDateFormatted);
+            journeyDateInput.setAttribute('min', pastDateFormatted);
+        }
+
+        function handleTrainNumberInput() {
+            const selectedTrainNumber = trainNumberInput.value;
+
+            const isValidTrainNumber = /^\d{5}$/.test(selectedTrainNumber);
+
+            const handleFetchError = (error) => {
+                stationsDropdown.innerHTML = getOptionHTML(error.message);
+                dstationsDropdown.innerHTML = getOptionHTML(error.message);
+            };
+
+            if (isValidTrainNumber) {
+                fetchStations(selectedTrainNumber)
+                    .then(data => {
+                        populateStationsDropdown(data.stations);
+                        stationList = data.stations;
+                    })
+                    .catch(handleFetchError);
+            } else {
+                stationsDropdown.innerHTML = getOptionHTML('Wait for few seconds to fetch stations automatically. If not able to get stations list, please enter a valid 5-digit train number');
+                dstationsDropdown.innerHTML = getOptionHTML('Wait for few seconds to fetch stations automatically. If not able to get stations list, please enter a valid 5-digit train number');
+
+            }
+
+           
+        }
+
+        function fetchStations(trainNumber) {
+            return fetch(`/stations/${trainNumber}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Stations could not be fetched. Please enter a valid train number.');
+                    }
+                    return response.json();
+                });
+        }
+
+         function populateStationsDropdown(stationList) {
+            stationsDropdown.innerHTML = ''; // Clear previous options
+            dstationsDropdown.innerHTML = '';
+            stationList.forEach(station => {
+                const option = document.createElement('option');
+                option.value = station;
+                option.textContent = station;
+                stationsDropdown.appendChild(option);
+            });
+
+            stationList.forEach(station => {
+                const option = document.createElement('option');
+                option.value = station;
+                option.textContent = station;
+                dstationsDropdown.appendChild(option);
+            });
+        }
+
+        function getOptionHTML(text) {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = text;
+            return option;
+        }
+
+        function handleFormSubmit(event) {
+            event.preventDefault();
+
+            document.getElementById('submit_form').disabled = true;
+
+            const trainNumber = document.getElementById('trainNumber').value;
+            const station = document.getElementById('station').value;
+            const dstation = document.getElementById('dstation').value;
+            const journeyDate = document.getElementById('journeyDate').value;
+            const email = document.getElementById('email').value;
+
+            checkChartStatus(trainNumber, station, dstation, journeyDate, email)
+                .catch((error) => {
+                    console.error('Error checking chart status:', error);
+                    document.getElementById('submit_form').disabled = false;
+                })
+                .then(() => {
+                    document.getElementById('submit_form').disabled = false;
+                });
+        }
+
+        function checkChartStatus(trainNumber, station, dstation, journeyDate, email) {
+            
+            console.log(stationList);
+            if (stationList.indexOf(station) >= stationList.indexOf(dstation)) {
+                alert("Select source and destination stations correctly");
+                document.getElementById('submit_form').disabled = false;
+                return ;
+            }
+            showLoader();
+            return fetch('/prev-chart-status', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    train_number: trainNumber,
+                    station: station,
+                    dstation : dstation,
+                    journey_date: journeyDate,
+                    email: email
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                audio.style.display = 'block' ;
+                document.getElementById('chartStatusResult').textContent = `Chart Status: ${data.status}`;
+                document.getElementById('tableContainer').innerHTML = data.table;
+                return fetch('/chart-status', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        train_number: trainNumber,
+                        station: station,
+                        dstation : dstation,
+                        journey_date: journeyDate,
+                        email: email
+                    })
+                });
+            })
+            .then(response => response.json())
+            .then(data => handleChartStatusResponse(data))
+            .catch((error) => {
+                console.error('Error checking chart status:', error);
+            })
+            .finally(() => {
+                hideLoader();
+            });
+        }
+
+        function handleChartStatusResponse(data) {
+            document.getElementById('chartStatusResult').textContent = `Chart Status: ${data.status}`;
+            document.getElementById('tableContainer').innerHTML = data.sdtable;
+
+            if (data.status.includes('The chart for your train was prepared at')) {
+                enableAudioAutoplay();
+            } else if (data.status.includes('Chart will be prepared soon')) {
+                enableAudioAutoplay();
+                checkChartStatus(trainNumber, station,dstation, journeyDate, email);
+            }
+        }
+
+        function enableAudioAutoplay() {
+            const audioElement = document.getElementById('myAudio');
+            audioElement.disabled = false;
+            audioElement.autoplay = true;
+        }
+
+        function showLoader() {
+            document.getElementById('loader').style.display = 'block';
+        }
+
+        function hideLoader() {
+            document.getElementById('loader').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
