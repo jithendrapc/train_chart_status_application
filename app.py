@@ -12,7 +12,7 @@ from email.encoders import encode_base64
 app = Flask(__name__)
 
 from_email_address = 'testmail.andhra@gmail.com'
-from_email_pass = "yexi yzje alrx hhhi"
+from_email_pass = "litz biwr mqfm innl"
 
 server = None
 def initialize_server():
